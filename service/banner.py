@@ -1,4 +1,5 @@
 import socket
+import ssl
 import re
 
 SIGNATURES = {
@@ -80,6 +81,39 @@ PROBE_MAP = {
     b"\x80\x00\x00\x28\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x01\x86\xa3\x00\x00\x00\x04",
 }
 
+TLS_PORTS = {443, 8443, 993, 995, 465, 587}
+
+
+def try_tls(target_ip: str, port: int) -> str | None:
+    try:
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+
+        with socket.create_connection((target_ip, port), timeout=3) as sock:
+            with context.wrap_socket(sock,
+                                     server_hostname=target_ip) as tls_sock:
+                tls_version = tls_sock.version()
+
+                cert = tls_sock.getpeercert()
+                subject = dict(x[0] for x in cert.get("subject", []))
+                common_name = subject.get("commonName", "Unknown")
+
+                # Try HTTP over TLS if applicable
+                try:
+                    tls_sock.sendall(b"HEAD / HTTP/1.1\r\nHost: " +
+                                     target_ip.encode() + b"\r\n\r\n")
+                    response = tls_sock.recv(1024)
+                    decoded = response.decode("utf-8", errors="ignore")
+                    service = identify_by_signature(decoded)
+                except Exception:
+                    service = "TLS Service"
+
+                return f"[{service}] TLS:{tls_version} CN:{common_name}"
+
+    except Exception:
+        return None
+
 
 def identify_by_signature(banner_text):
     for service, pattern in SIGNATURES.items():
@@ -89,6 +123,14 @@ def identify_by_signature(banner_text):
 
 
 def discover_service(target_ip: str, port: int) -> str:
+
+    # ---- Try TLS First (if common TLS port) ----
+    if port in TLS_PORTS:
+        tls_result = try_tls(target_ip, port)
+        if tls_result:
+            return tls_result
+
+    # ---- Fallback to Plain TCP ----
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.settimeout(2.5)
 
