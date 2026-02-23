@@ -88,12 +88,12 @@ def identify_by_signature(banner_text):
     return "Unknown Service"
 
 
-def discover_service(ip: str, port: int) -> str:
+def discover_service(target_ip: str, port: int) -> str:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.settimeout(2.5)
 
         try:
-            s.connect((ip, port))
+            s.connect((target_ip, port))
             banner_data = None
 
             try:
@@ -127,15 +127,3 @@ def discover_service(ip: str, port: int) -> str:
             return f"Error: {str(e)}"
 
     return "Unknown State"
-
-
-def main():
-    ip_address = input("Enter IP: ")
-    open_port = int(input("Enter open port: "))
-    result = discover_service(ip_address, open_port)
-    print(f"\n[*] Results for {ip_address}:{open_port}")
-    print(f"    {result}")
-
-
-if __name__ == "__main__":
-    main()
