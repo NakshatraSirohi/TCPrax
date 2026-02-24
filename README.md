@@ -156,25 +156,25 @@ No third-party dependencies required.
 ### Connect Scan
 
 ```bash
-python main.py --target <IP> -sT
+python main.py <IPv4/Domain> -sT
 ```
 
 ### SYN Half-Open Scan
 
 ```bash
-sudo python main.py --target <IP> -sS
+sudo python main.py <IPv4/Domain> -sS
 ```
 
 ### With Service Detection
 
 ```bash
-sudo python main.py --target <IP> -sS --service
+sudo python main.py <IPv4/Domain> -sS --service
 ```
 
 ### Port Range
 
 ```bash
-sudo python main.py --target <IP> -sS --ports 1-1000
+sudo python main.py <IPv4/Domain> -sS --ports 1-1000
 ```
 
 ---
