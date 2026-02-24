@@ -25,9 +25,9 @@ def main():
     results = None
     target_ip = resolve_host(args.host)
     if (args.sT):
-        results = connect_scan(target_ip, ports)
+        results = connect_scan(target_ip, ports, args.threads)
     elif (args.sS):
-        results = syn_scan(target_ip, ports)
+        results = syn_scan(target_ip, ports, args.threads)
 
     if (args.sV):
         for result in results:

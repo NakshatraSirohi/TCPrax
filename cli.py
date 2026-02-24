@@ -29,10 +29,11 @@ def parse_ports(port_string: str) -> list[int]:
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        description=("TCPrax - Custom TCP Scanner\n\n"
-                     "Example Usage:\n"
-                     "  sudo python3 main.py example.com -p 1-1000 -sS -sV\n"
-                     "  python3 main.py 192.168.1.1 -p 22,80,443 -sT"),
+        description=(
+            "TCPrax - Custom TCP Scanner\n\n"
+            "Example Usage:\n"
+            "  sudo python3 main.py example.com -p 1-1000 -sS -sV -t 100\n"
+            "  python3 main.py 192.168.1.1 -p 22,80,443 -sT -t 50"),
         formatter_class=argparse.RawTextHelpFormatter)
 
     parser.add_argument("host", help="Target host (IP or domain)")
@@ -53,4 +54,25 @@ def parse_arguments():
                         action="store_true",
                         help="Service/version detection")
 
-    return parser.parse_args()
+    parser.add_argument(
+        "-t",
+        "--threads",
+        type=int,
+        default=20,
+        help="Number of concurrent threads (default: 20, recommended: 50-200)")
+
+    # parser.add_argument("-t", "--threads", dest="t", ...)
+    # to save the above thread parse value in "t" instead of "threads"
+    # as by default parser.args has dest=long_option_name_without_dashes
+
+    args = parser.parse_args()
+
+    # Thread Safety Validation
+    if args.threads < 1:
+        parser.error("Thread count must be at least 1.")
+
+    if args.threads > 300:
+        parser.error(
+            "Thread count too high. Risk of resource exhaustion (>300).")
+
+    return args
