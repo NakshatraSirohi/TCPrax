@@ -200,25 +200,19 @@ No third-party dependencies required.
 ### Connect Scan
 
 ```bash
-python main.py <IPv4/Domain> -sT
+python main.py <IPv4/Domain> -sT -p 1-500 -t 10
 ```
 
 ### SYN Half-Open Scan
 
 ```bash
-sudo python main.py <IPv4/Domain> -sS
+sudo python main.py <IPv4/Domain> -sS -p 1-1000 -t 50
 ```
 
 ### With Service Detection
 
 ```bash
-sudo python main.py <IPv4/Domain> -sS --service
-```
-
-### Port Range
-
-```bash
-sudo python main.py <IPv4/Domain> -sS --ports 1-1000
+sudo python main.py <IPv4/Domain> -sS -p 1-2000 -sV -t 100
 ```
 
 ### Example Output
@@ -298,7 +292,7 @@ Unauthorized scanning may violate laws and network policies.
 
 ## Version
 
-Current stable release: **v1.1.0**
+Current release: **v1.1.1**
 
 ---
 
