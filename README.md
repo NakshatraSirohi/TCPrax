@@ -200,7 +200,7 @@ No third-party dependencies required.
 ### Connect Scan
 
 ```bash
-python main.py <IPv4/Domain> -sT -p 1-1000 -t 50
+python main.py <IPv4/Domain> -sT -p 1-500 -t 10
 ```
 
 ### SYN Half-Open Scan
@@ -212,7 +212,7 @@ sudo python main.py <IPv4/Domain> -sS -p 1-1000 -t 50
 ### With Service Detection
 
 ```bash
-sudo python main.py <IPv4/Domain> -sS -p 1-1000 -sV -t 50
+sudo python main.py <IPv4/Domain> -sS -p 1-2000 -sV -t 100
 ```
 
 ### Example Output

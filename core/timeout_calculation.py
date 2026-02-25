@@ -1,3 +1,27 @@
+"""
+Adaptive Timeout Calibration Module
+
+Implements RTT-based timeout estimation for both:
+- TCP Connect Scan (-sT)
+- TCP SYN Half-Open Scan (-sS)
+
+Strategy:
+1. Probe a small set of well-known ports.
+2. Measure RTT from successful responses.
+3. Compute median RTT.
+4. Derive timeout as median * 3.
+5. Clamp timeout within [0.5s, 3.0s].
+
+Purpose:
+- Avoid static timeouts.
+- Adapt to local network latency.
+- Improve scan accuracy across LAN/WAN environments.
+
+Note:
+- Uses global RTT_SAMPLES accumulator.
+- Calibration only samples OPEN ports.
+"""
+
 import socket
 import time
 import random
@@ -5,14 +29,23 @@ from struct import unpack
 from typing import Optional
 from .create_syn_packet import create_syn_packet
 
-# === Globals ===
-CALIBRATION_PORTS = [80, 443, 22]
+CALIBRATION_PORTS = [80, 443, 22]  # Commonly open ports for RTT sampling
 RTT_SAMPLES = []
 TIMEOUT = None
 
 
 # === TCP Connect Scan Timeout Calculation ===
 def connect_scan_timeout(target_ip: str) -> None:
+    """
+    Performs RTT sampling using TCP connect_ex() semantics.
+
+    For each calibration port:
+        - Attempt connection.
+        - If open, measure RTT via repeated probes.
+
+    Only successful connections contribute to RTT_SAMPLES.
+    """
+
     for port in CALIBRATION_PORTS:
         connect_sock = None
         try:
@@ -20,15 +53,15 @@ def connect_scan_timeout(target_ip: str) -> None:
             connect_sock.settimeout(2.0)
             response = connect_sock.connect_ex((target_ip, port))
 
-            # connect_ex returns 0 if open else non-zero for error
+            # connect_ex returns 0 on success (port open)
             if (response == 0):
                 connect_probe(target_ip, port)
 
         except (OSError, socket.timeout):
-            # Safely ignore normal network failures (e.g., host down, port filtered)
+            # Ignore normal network failures (host down, filtered, etc.)
             pass
         finally:
-            if connect_sock:  # Safety check
+            if connect_sock:
                 try:
                     connect_sock.close()
                 except OSError:
@@ -36,6 +69,13 @@ def connect_scan_timeout(target_ip: str) -> None:
 
 
 def connect_probe(target_ip: str, port: int) -> None:
+    """
+    Collects RTT samples using full TCP handshake.
+
+    Sends multiple connect attempts and records
+    high-resolution timing for successful connections.
+    """
+
     global RTT_SAMPLES
 
     for _ in range(5):
@@ -63,20 +103,31 @@ def connect_probe(target_ip: str, port: int) -> None:
 
 
 # === TCP Half-Open (SYN) Timeout Calculation ===
-def _wait_for_syn_response(raw_sock,
-                           target_ip,
-                           src_ip,
-                           dest_port,
-                           src_port,
-                           timeout: float,
-                           measure_rtt: bool = False,
-                           start_rtt: Optional[float] = None):
+def wait_for_syn_response(raw_sock,
+                          target_ip,
+                          src_ip,
+                          dest_port,
+                          src_port,
+                          timeout: float,
+                          measure_rtt: bool = False,
+                          start_rtt: Optional[float] = None):
     """
-    Waits for matching SYN response packet.
+    Waits for a matching SYN response packet.
+
+    Filters inbound TCP traffic using:
+        - Source IP
+        - Destination IP
+        - Source port
+        - Destination port
+
+    Parameters:
+        measure_rtt: If True, returns measured RTT instead of boolean.
+        start_rtt: Timestamp recorded before SYN transmission.
+
     Returns:
-        - True (if match, no RTT measurement)
-        - float RTT (if measure_rtt=True)
-        - False if no match
+        True        : Matching response received
+        float (RTT) : If measure_rtt enabled
+        False       : No matching packet within timeout
     """
 
     start_time = time.perf_counter()
@@ -87,25 +138,31 @@ def _wait_for_syn_response(raw_sock,
         except socket.timeout:
             return False
 
+        # Minimum IPv4 header length check
         if len(response) < 20:
             continue
 
+        # Parse IPv4 header
         ip_header = unpack('!BBHHHBBH4s4s', response[:20])
         ihl = ip_header[0] & 0x0F
         ip_len = ihl * 4
 
+        # Ensure full TCP header present
         if len(response) < (ip_len + 20):
             continue
 
+        # Only process TCP packets
         if ip_header[6] != socket.IPPROTO_TCP:
             continue
 
         recv_pkt_src_ip = socket.inet_ntoa(ip_header[8])
         recv_pkt_dest_ip = socket.inet_ntoa(ip_header[9])
 
+        # Match only responses for this probe
         if ((recv_pkt_src_ip != target_ip) or (recv_pkt_dest_ip != src_ip)):
             continue
 
+        # Parse TCP header
         recv_tcp_header = response[ip_len:ip_len + 20]
         unpack_tcph = unpack('!HHLLBBHHH', recv_tcp_header)
 
@@ -118,6 +175,14 @@ def _wait_for_syn_response(raw_sock,
 
 
 def is_port_open(src_ip: str, target_ip: str, dest_port: int) -> bool:
+    """
+    Performs a single SYN probe to determine if a port is open.
+
+    Returns:
+        True  : Matching SYN-ACK observed
+        False : No response / error
+    """
+
     raw_syn_sock = None
     try:
         src_port = random.randint(50000, 50500)
@@ -130,18 +195,18 @@ def is_port_open(src_ip: str, target_ip: str, dest_port: int) -> bool:
 
         raw_syn_sock.sendto(packet, (target_ip, dest_port))
 
-        result = _wait_for_syn_response(raw_syn_sock,
-                                        target_ip,
-                                        src_ip,
-                                        dest_port,
-                                        src_port,
-                                        timeout=2.0,
-                                        measure_rtt=False)
+        result = wait_for_syn_response(raw_syn_sock,
+                                       target_ip,
+                                       src_ip,
+                                       dest_port,
+                                       src_port,
+                                       timeout=2.0,
+                                       measure_rtt=False)
 
         return bool(result)
 
     except (OSError, socket.timeout):
-        # Catches raw socket permission errors or general network unreachability
+        # Includes raw socket permission errors and network failures
         return False
     finally:
         if raw_syn_sock:
@@ -152,6 +217,12 @@ def is_port_open(src_ip: str, target_ip: str, dest_port: int) -> bool:
 
 
 def syn_probe(src_ip: str, target_ip: str, dest_port: int) -> None:
+    """
+    Collects RTT samples using SYN half-open semantics.
+
+    Measures time between SYN transmission and matching SYN-ACK reception.
+    """
+
     global RTT_SAMPLES
 
     for _ in range(5):
@@ -168,14 +239,14 @@ def syn_probe(src_ip: str, target_ip: str, dest_port: int) -> None:
             start_rtt = time.perf_counter()
             raw_syn_sock.sendto(packet, (target_ip, dest_port))
 
-            rtt = _wait_for_syn_response(raw_syn_sock,
-                                         target_ip,
-                                         src_ip,
-                                         dest_port,
-                                         src_port,
-                                         timeout=2.0,
-                                         measure_rtt=True,
-                                         start_rtt=start_rtt)
+            rtt = wait_for_syn_response(raw_syn_sock,
+                                        target_ip,
+                                        src_ip,
+                                        dest_port,
+                                        src_port,
+                                        timeout=2.0,
+                                        measure_rtt=True,
+                                        start_rtt=start_rtt)
 
             if isinstance(rtt, float):
                 RTT_SAMPLES.append(rtt)
@@ -191,6 +262,12 @@ def syn_probe(src_ip: str, target_ip: str, dest_port: int) -> None:
 
 
 def syn_scan_timeout(src_ip: str, target_ip: str) -> None:
+    """
+    Performs RTT calibration using SYN probes.
+
+    Only probes ports that appear open.
+    """
+
     for dest_port in CALIBRATION_PORTS:
         if (is_port_open(src_ip, target_ip, dest_port)):
             syn_probe(src_ip, target_ip, dest_port)
@@ -200,6 +277,19 @@ def syn_scan_timeout(src_ip: str, target_ip: str) -> None:
 def calculate_timeout(method: str,
                       target_ip: str,
                       src_ip: str | None = None) -> float:
+    """
+    Computes adaptive timeout value for scan engines.
+
+    Steps:
+        1. Perform RTT calibration based on scan method.
+        2. Compute median RTT.
+        3. Multiply by 3 as safety margin.
+        4. Clamp to range [0.5s, 3.0s].
+
+    Returns:
+        Final timeout value in seconds.
+    """
+
     global RTT_SAMPLES, TIMEOUT
 
     RTT_SAMPLES = []
@@ -214,10 +304,14 @@ def calculate_timeout(method: str,
     if RTT_SAMPLES:
         RTT_SAMPLES.sort()
         median_rtt = RTT_SAMPLES[len(RTT_SAMPLES) // 2]
+
+        # Multiply median RTT to tolerate network jitter
         TIMEOUT = median_rtt * 3
     else:
+        # Fallback if no samples collected
         TIMEOUT = 1.0
 
+    # Bound timeout to prevent extreme values
     TIMEOUT = max(0.5, min(TIMEOUT, 3.0))
 
     return TIMEOUT
