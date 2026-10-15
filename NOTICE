@@ -1,0 +1,53 @@
+TCPrax
+======
+
+TCPrax is licensed under the MIT License (see LICENSE), Copyright (c)
+2026 Nakshatra Sirohi.
+
+This product includes data derived from third-party sources, credited
+below. These attributions are required by the respective licenses.
+
+
+Nmap Service Probes (service/nmap_fingerprints.py)
+--------------------------------------------------
+
+service/nmap_fingerprints.py contains a curated, normalized SUBSET of
+service-detection fingerprints derived from Nmap's `nmap-service-probes`
+database:
+
+    Nmap Security Scanner - https://nmap.org
+    Service probe data (C) 1998-2026 Insecure.Com LLC.
+    Source revision: nmap-service-probes 39385 (2026-03-19)
+
+This data is distributed under the Nmap Public Source License (NPSL):
+
+    https://nmap.org/npsl/
+
+The fingerprints in service/nmap_fingerprints.py are a modified subset:
+selected common services only, converted from Nmap's PCRE syntax to
+Python `re` byte patterns, with only the service name, pattern and
+product/version templates retained. This is NOT the official Nmap
+database, and TCPrax is not affiliated with or endorsed by the Nmap
+Project. The generated file is marked with source="nmap-service-probes"
+on every entry so its origin is traceable in code.
+
+To regenerate this file from a local copy of nmap-service-probes:
+
+    python3 tools/extract_nmap_fingerprints.py [path/to/nmap-service-probes]
+
+
+IANA Service Names and Port Numbers
+-----------------------------------
+
+TCPrax's common-service dataset and port hints are based on the service
+name and port number assignments published by IANA in the Service Name
+and Transport Protocol Port Number Registry:
+
+    https://www.iana.org/assignments/service-names-port-numbers/
+
+Port and service-name assignments are factual registrations. IANA does
+NOT publish or endorse any "most common services" ranking; TCPrax's
+selection of common services is a curated dataset based on IANA
+registrations supplemented by public service-usage data, and is
+described as such (see README). IANA data is used for identification
+hints only, never as sole proof that a service is running on a port.

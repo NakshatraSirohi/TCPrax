@@ -1,0 +1,4 @@
+# Optional GUI dependency for TCPrax.
+# The CLI has no third-party runtime dependencies; install this only to
+# use the graphical interface (python3 main.py --gui).
+PySide6>=6.5
